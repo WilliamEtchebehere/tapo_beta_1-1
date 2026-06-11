@@ -1,0 +1,14 @@
+{
+  "1": {
+    "title": "Página 1",
+    "content": "<h1>Página 1</h1><p>Bem-vindo ao seu PDF navegável! Substitua este conteúdo pelo conteúdo extraído do seu PDF.</p><p>Use este template para organizar todo o conteúdo das 59 páginas. Veja a documentação em README.md para instruções de extração.</p>"
+  },
+  "2": {
+    "title": "Página 2",
+    "content": "<h1>Página 2</h1><p>Este é um exemplo de como adicionar links internos que funcionam para navegação:</p><p><a href=\"#\" data-page=\"1\">← Voltar para a página 1</a></p><p>Para adicionar links internos, use o atributo data-page com o número da página desejada.</p>"
+  },
+  "3": {
+    "title": "Página 3",
+    "content": "<h1>Página 3</h1><p>Página de exemplo. Você pode navegar usando:</p><ul><li>Botões Anterior e Próxima no topo</li><li>Digite um número na caixa de página</li><li>Use as setas do teclado (← →)</li></ul>"
+  }
+}
