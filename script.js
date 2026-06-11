@@ -1,6 +1,6 @@
 /**
  * Sistema de Navegação de PDF Convertido em Website
- * Suporta 59 páginas com navegação fluida
+ * Suporta 59 páginas com navegação fluida e otimizado para performance
  */
 
 class PDFNavigator {
@@ -9,6 +9,8 @@ class PDFNavigator {
         this.totalPages = 59;
         this.pages = {};
         this.isLoading = false;
+        this.pagesLoaded = false;
+        this.inputDebounceTimer = null;
 
         this.elements = {
             pageContent: document.getElementById('page-content'),
@@ -24,7 +26,39 @@ class PDFNavigator {
 
     init() {
         this.setupEventListeners();
-        this.loadPage(1);
+        // Preload pages.json on initialization
+        this.preloadPages();
+    }
+
+    /**
+     * Preload pages.json data once on app start
+     */
+    preloadPages() {
+        if (this.pagesLoaded) return;
+
+        this.isLoading = true;
+        fetch('pages.json')
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                this.pages = data;
+                this.pagesLoaded = true;
+                this.isLoading = false;
+                // Load initial page after data is ready
+                this.displayPage(1);
+            })
+            .catch(error => {
+                console.error('Erro ao carregar páginas:', error);
+                this.elements.pageContent.innerHTML = `
+                    <div style="color: red; text-align: center; padding: 2rem;">
+                        <p>Erro ao carregar o conteúdo das páginas</p>
+                        <p style="font-size: 0.9rem; color: #666;">${error.message}</p>
+                    </div>
+                `;
+                this.isLoading = false;
+            });
     }
 
     setupEventListeners() {
@@ -32,21 +66,42 @@ class PDFNavigator {
         this.elements.prevBtn.addEventListener('click', () => this.previousPage());
         this.elements.nextBtn.addEventListener('click', () => this.nextPage());
 
-        // Input de página
+        // Input de página com debounce
         this.elements.pageIndicator.addEventListener('change', (e) => {
-            const page = parseInt(e.target.value);
-            if (page >= 1 && page <= this.totalPages) {
-                this.loadPage(page);
-            } else {
-                e.target.value = this.currentPage;
-            }
+            this.handlePageInput(e);
+        });
+
+        // Alternativa: debounce para input em tempo real
+        this.elements.pageIndicator.addEventListener('input', (e) => {
+            clearTimeout(this.inputDebounceTimer);
+            this.inputDebounceTimer = setTimeout(() => {
+                this.handlePageInput(e);
+            }, 300);
         });
 
         // Teclas de navegação (setas do teclado)
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') this.previousPage();
-            if (e.key === 'ArrowRight') this.nextPage();
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                this.previousPage();
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                this.nextPage();
+            }
         });
+    }
+
+    /**
+     * Handle page input with validation
+     */
+    handlePageInput(e) {
+        const page = parseInt(e.target.value);
+        if (page >= 1 && page <= this.totalPages) {
+            this.loadPage(page);
+        } else {
+            e.target.value = this.currentPage;
+        }
     }
 
     previousPage() {
@@ -61,83 +116,91 @@ class PDFNavigator {
         }
     }
 
+    /**
+     * Load and display a page
+     * Optimized: No fetching if pages are already preloaded
+     */
     loadPage(pageNumber) {
         if (this.isLoading) return;
 
         pageNumber = Math.max(1, Math.min(pageNumber, this.totalPages));
 
-        this.isLoading = true;
-        this.elements.pageContent.classList.add('loading');
-
-        // Se a página já foi carregada, use do cache
-        if (this.pages[pageNumber]) {
-            this.displayPage(pageNumber);
-            this.isLoading = false;
+        // If pages haven't loaded yet, wait
+        if (!this.pagesLoaded) {
+            console.warn('Pages still loading, please wait...');
             return;
         }
 
-        // Carrega a página do arquivo JSON
-        fetch('pages.json')
-            .then(response => response.json())
-            .then(data => {
-                this.pages = data;
-                this.displayPage(pageNumber);
-                this.isLoading = false;
-            })
-            .catch(error => {
-                console.error('Erro ao carregar página:', error);
-                this.elements.pageContent.innerHTML = `
-                    <div style="color: red; text-align: center; padding: 2rem;">
-                        <p>Erro ao carregar a página ${pageNumber}</p>
-                        <p style="font-size: 0.9rem; color: #666;">${error.message}</p>
-                    </div>
-                `;
-                this.isLoading = false;
-            });
+        this.isLoading = true;
+        this.elements.pageContent.classList.add('loading');
+
+        // Use requestAnimationFrame to batch DOM updates
+        requestAnimationFrame(() => {
+            this.displayPage(pageNumber);
+        });
     }
 
+    /**
+     * Display the page content
+     * Optimized: Efficient DOM updates, removed old event listeners
+     */
     displayPage(pageNumber) {
         this.currentPage = pageNumber;
 
         const pageData = this.pages[pageNumber];
         if (!pageData) {
             this.elements.pageContent.innerHTML = '<p>Página não encontrada</p>';
+            this.isLoading = false;
+            this.elements.pageContent.classList.remove('loading');
             return;
         }
 
-        // Atualizar título
+        // Batch all DOM updates
         this.elements.pageTitle.textContent = pageData.title || `Página ${pageNumber}`;
-
-        // Atualizar conteúdo
         this.elements.pageContent.innerHTML = pageData.content;
-
-        // Atualizar indicadores
         this.elements.pageIndicator.value = pageNumber;
         this.elements.footerPage.textContent = pageNumber;
 
-        // Atualizar estado dos botões
+        // Update button states
         this.elements.prevBtn.disabled = pageNumber === 1;
         this.elements.nextBtn.disabled = pageNumber === this.totalPages;
 
-        // Remover classe de loading
+        // Remove loading class
         this.elements.pageContent.classList.remove('loading');
 
-        // Setup de links internos
+        // Setup internal links with event delegation
         this.setupInternalLinks();
 
-        // Scroll para o topo
-        window.scrollTo(0, 0);
+        // Defer scroll to next frame to avoid blocking
+        requestAnimationFrame(() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        this.isLoading = false;
     }
 
+    /**
+     * Setup internal links with proper event delegation
+     * Optimized: Removes old listeners, uses efficient querying
+     */
     setupInternalLinks() {
+        // Remove old listeners by cloning nodes (more efficient than manual removal)
         const links = this.elements.pageContent.querySelectorAll('a[data-page]');
+        
         links.forEach(link => {
-            link.addEventListener('click', (e) => {
+            // Clone to remove all old listeners
+            const newLink = link.cloneNode(true);
+            
+            newLink.addEventListener('click', (e) => {
                 e.preventDefault();
-                const targetPage = parseInt(link.getAttribute('data-page'));
-                this.loadPage(targetPage);
+                const targetPage = parseInt(newLink.getAttribute('data-page'));
+                if (targetPage >= 1 && targetPage <= this.totalPages) {
+                    this.loadPage(targetPage);
+                }
             });
-            link.classList.add('internal-link');
+            
+            newLink.classList.add('internal-link');
+            link.replaceWith(newLink);
         });
     }
 }
